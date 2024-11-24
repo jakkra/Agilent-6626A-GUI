@@ -10,16 +10,17 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QWidget,
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QFile, QTextStream
 from PyQt5.QtGui import QFontDatabase, QFont
 from PyQt5.QtWidgets import QLCDNumber
+import qdarkstyle
 
 
 class PowerSupplyGUI(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Power Supply Control")
+        self.setWindowTitle("HP 6626A")
         self.setGeometry(100, 100, 800, 600)
 
         # Create central widget
@@ -30,13 +31,15 @@ class PowerSupplyGUI(QMainWindow):
         main_layout = QVBoxLayout()
 
         # Add title
-        title_label = QLabel("Power Supply Control Panel")
+        title_label = QLabel("HP 6626A Power Supply Control")
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
         main_layout.addWidget(title_label)
 
         # Grid layout for outputs
         self.output_grid = QGridLayout()  # Create the grid layout
+        self.output_grid.setHorizontalSpacing(20)  # Set horizontal spacing
+        self.output_grid.setVerticalSpacing(20)  # Set vertical spacing
         self.outputs = []  # List to store references to each output section
 
         output_sections = [
@@ -64,6 +67,10 @@ class PowerSupplyGUI(QMainWindow):
         # Set the main layout
         central_widget.setLayout(main_layout)
 
+    def keyPressEvent(self, event):
+        """Override keyPressEvent to handle Enter key press."""
+        if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
+            self.on_set_clicked()
 
     def create_output_section(self, title, color):
         """Create a section for one power supply output."""
@@ -72,14 +79,15 @@ class PowerSupplyGUI(QMainWindow):
         # Section title
         section_title = QLabel(title)
         section_title.setAlignment(Qt.AlignCenter)
+        section_title.setFixedHeight(50)
         section_title.setStyleSheet(f"""
-            font-size: 16px;
+            font-size: 18px;
             font-weight: bold;
-            color: #333;
+            color: black;
             padding: 10px;
             background-color: {color};
-            border: 1px solid #ccc;
             border-radius: 5px;
+            margin: 2px;
         """)
         layout.addWidget(section_title)
 
@@ -99,13 +107,15 @@ class PowerSupplyGUI(QMainWindow):
         # Layout for output values
         layout.addWidget(QLabel("Voltage Out (V):"))
         layout.addWidget(voltage_out)
-        layout.addWidget(QLabel("Current Out (A):"))
+        layout.addWidget(QLabel("Current Max Out (A):"))
         layout.addWidget(current_out)
 
         # ON/OFF toggle button
         on_off_button = QPushButton("OFF")
         on_off_button.setCheckable(True)
-        on_off_button.toggled.connect(lambda checked: self.on_on_off_toggled(checked))
+        on_off_button.setFixedHeight(40)
+        on_off_button.setStyleSheet("font-size: 18px; font-weight: bold;")
+        on_off_button.toggled.connect(lambda checked, voltage_out=voltage_out, current_out=current_out: self.on_on_off_toggled(checked, voltage_out, current_out))
         layout.addWidget(on_off_button)
 
         # Container widget for the section
@@ -113,6 +123,8 @@ class PowerSupplyGUI(QMainWindow):
         container.setObjectName("outerContainer")
         container.setLayout(layout)
         container.mousePressEvent = lambda event: self.on_output_selected(container)
+        # Add border around container
+        container.setStyleSheet("QWidget#outerContainer { border: 4px solid #545454; border-radius: 10px; }")
 
         # Return references to widgets and layout
         return {
@@ -144,19 +156,35 @@ class PowerSupplyGUI(QMainWindow):
 
         # Voltage set
         h_layout1 = QHBoxLayout()
-        h_layout1.addWidget(QLabel("Voltage Set (V):"))
+        voltage_label = QLabel("Voltage Set (V):")
+        voltage_label.setStyleSheet("font-size: 16px;")  # Increase font size
+        h_layout1.addWidget(voltage_label)
         self.voltage_input = QLineEdit()
         self.voltage_input.setPlaceholderText("Enter voltage")
         self.voltage_input.setFont(segment_font)
         self.voltage_input.setText(f"{0:.3f}")
+        self.voltage_input.setStyleSheet("border: 1px solid black; border-radius: 1px; margin: 0px; font-size: 24px;")
         h_layout1.addWidget(self.voltage_input)
+
+        # Fixed voltage buttons
+        fixed_voltages = [1.8, 3.3, 5.0]
+        for voltage in fixed_voltages:
+            button = QPushButton(f"{voltage}V")
+            button.setFixedSize(100, 30)  # Set button size
+            button.setStyleSheet("font-size: 16px;")  # Increase font size
+            button.clicked.connect(lambda _, v=voltage: self.set_fixed_voltage(v))
+            h_layout1.addWidget(button)
 
         # Increment and Decrement buttons for voltage
         voltage_inc_button = QPushButton("+")
+        voltage_inc_button.setFixedSize(50, 30)  # Set button size
+        voltage_inc_button.setStyleSheet("font-size: 16px;")  # Increase font size
         voltage_inc_button.clicked.connect(lambda: self.increment_value(self.voltage_input, 0.1))
         h_layout1.addWidget(voltage_inc_button)
 
         voltage_dec_button = QPushButton("-")
+        voltage_dec_button.setFixedSize(50, 30)  # Set button size
+        voltage_dec_button.setStyleSheet("font-size: 16px;")  # Increase font size
         voltage_dec_button.clicked.connect(lambda: self.increment_value(self.voltage_input, -0.1))
         h_layout1.addWidget(voltage_dec_button)
 
@@ -164,19 +192,35 @@ class PowerSupplyGUI(QMainWindow):
 
         # Current set
         h_layout2 = QHBoxLayout()
-        h_layout2.addWidget(QLabel("Current Set (A):"))
+        current_label = QLabel("Current Set (A):")
+        current_label.setStyleSheet("font-size: 16px;")  # Increase font size
+        h_layout2.addWidget(current_label)
         self.current_input = QLineEdit()
         self.current_input.setPlaceholderText("Enter current")
         self.current_input.setFont(segment_font)
         self.current_input.setText(f"{0:.3f}")
+        self.current_input.setStyleSheet("border: 1px solid black; border-radius: 1px; margin: 0px; font-size: 24px;")
         h_layout2.addWidget(self.current_input)
+
+        # Fixed current buttons
+        fixed_currents = [0.1, 0.5, 1.0]
+        for current in fixed_currents:
+            button = QPushButton(f"{current}A")
+            button.setFixedSize(100, 30)  # Set button size
+            button.setStyleSheet("font-size: 16px;")  # Increase font size
+            button.clicked.connect(lambda _, c=current: self.set_fixed_current(c))
+            h_layout2.addWidget(button)
 
         # Increment and Decrement buttons for current
         current_inc_button = QPushButton("+")
+        current_inc_button.setFixedSize(50, 30)  # Set button size
+        current_inc_button.setStyleSheet("font-size: 16px;")  # Increase font size
         current_inc_button.clicked.connect(lambda: self.increment_value(self.current_input, 0.1))
         h_layout2.addWidget(current_inc_button)
 
         current_dec_button = QPushButton("-")
+        current_dec_button.setFixedSize(50, 30)  # Set button size
+        current_dec_button.setStyleSheet("font-size: 16px;")  # Increase font size
         current_dec_button.clicked.connect(lambda: self.increment_value(self.current_input, -0.1))
         h_layout2.addWidget(current_dec_button)
 
@@ -184,8 +228,8 @@ class PowerSupplyGUI(QMainWindow):
 
         # Set button
         set_button = QPushButton("Set")
-        set_button.setStyleSheet("font-size: 30px; padding: 5px;")  # Increase font size to 20px
-        set_button.setFixedSize(200, 70)  # Set button size to 200x70
+        set_button.setStyleSheet("font-size: 26px; padding: 5px;")  # Increase font size to 30px
+        set_button.setFixedSize(200, 50)  # Set button size to 200x70
         set_button.clicked.connect(self.on_set_clicked)
 
         # Center the set button
@@ -197,6 +241,14 @@ class PowerSupplyGUI(QMainWindow):
         layout.addLayout(button_layout)
 
         return layout
+
+    def set_fixed_voltage(self, voltage):
+        """Set the voltage input to a fixed value."""
+        self.voltage_input.setText(f"{voltage:.3f}")
+
+    def set_fixed_current(self, current):
+        """Set the current input to a fixed value."""
+        self.current_input.setText(f"{current:.3f}")
 
     def increment_value(self, line_edit, step):
         """Increment the value in the QLineEdit by the given step."""
@@ -211,7 +263,7 @@ class PowerSupplyGUI(QMainWindow):
         """Handle selection of an output section."""
         # Reset the border of previously selected output (if any)
         if hasattr(self, "selected_output") and self.selected_output:
-            self.selected_output["container"].setStyleSheet("")  # Remove previous highlight
+            self.selected_output["container"].setStyleSheet("QWidget#outerContainer { border: 4px solid #545454; border-radius: 10px; }") # Remove previous highlight
 
         # Find and set the newly selected output
         for output in self.outputs:
@@ -219,7 +271,7 @@ class PowerSupplyGUI(QMainWindow):
                 self.selected_output = output
                 # Apply border highlighting only to the outer container
                 output["container"].setStyleSheet(
-                    "QWidget#outerContainer { border: 2px solid blue; border-radius: 5px; }"
+                    "QWidget#outerContainer { border: 5px solid #8ab6f7; border-radius: 10px; }"
                 )
                 break
 
@@ -248,17 +300,23 @@ class PowerSupplyGUI(QMainWindow):
         except ValueError:
             print("Invalid input for voltage or current!")
 
-    def on_on_off_toggled(self, checked):
+    def on_on_off_toggled(self, checked, voltage_out, current_out):
         """Handle ON/OFF toggle for an output."""
         sender = self.sender()
         if checked:
-            sender.setText("ON")
-            sender.setStyleSheet("background-color: green;")
             print("Output turned ON.")
-        else:
             sender.setText("ON")
-            sender.setStyleSheet("")
+            sender.setStyleSheet("background-color: green; font-size: 18px; font-weight: bold;")
+            # Change the color of the voltage_out digits to green
+            voltage_out.setStyleSheet("color: green;")
+            current_out.setStyleSheet("color: green;")
+        else:
             print("Output turned OFF.")
+            sender.setText("OFF")
+            sender.setStyleSheet("font-size: 18px; font-weight: bold;")
+            # Reset the color of the voltage_out digits
+            voltage_out.setStyleSheet("")
+            current_out.setStyleSheet("")
 
 
 if __name__ == "__main__":
@@ -266,6 +324,12 @@ if __name__ == "__main__":
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
+
+    # setup stylesheet
+    app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
+    # or in new API
+    app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyqt5'))
+
     window = PowerSupplyGUI()
     window.show()
     sys.exit(app.exec_())
