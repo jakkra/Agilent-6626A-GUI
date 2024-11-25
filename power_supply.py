@@ -37,6 +37,13 @@ class PowerSupply:
         full_command = f"OUTPUT {self.module_id}; {command}"
         return self.instrument.query(full_command)
 
+    def _init_instrument(self):
+        """
+        Initializes the power supply instrument.
+        """
+        self._send_command("CLR")
+        self._send_command("DSP 1")  # Turn on display
+
     def list_resources(self):
         """
         List available resources.
@@ -72,6 +79,16 @@ class PowerSupply:
         print(
             f"Connected to power supply on {serial_port} with baudrate {baudrate} and instrument ID {instrument_id}"
         )
+
+    def write_to_screen(self, text):
+        """
+        Write text to the power supply screen.
+        :param text: The text to write to the screen. Max 12 capital letters.  Only upper case alpha characters, numbers, and spaces will be displayed.
+        """
+        if len(text) > 12:
+            raise PowerSupplyError("Text must be less than 12 characters")
+        text = text.upper()
+        self._send_command(f'DSP "{text}"')
 
     def disconnect(self):
         """
