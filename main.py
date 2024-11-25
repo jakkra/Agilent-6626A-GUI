@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
     QComboBox,
     QTextEdit,
 )
-from PyQt5.QtCore import Qt, QFile, QTextStream
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFontDatabase, QFont
 from PyQt5.QtWidgets import QLCDNumber
 import qdarkstyle
@@ -73,7 +73,11 @@ class PowerSupplyGUI(QMainWindow):
         central_widget.setLayout(main_layout)
 
         if config:
-            self.serial_port_input.setText(config.get("serial_port", ""))
+            saved_serial_port = config.get("serial_port", "")
+            index = self.serial_port_input.findText(saved_serial_port)
+            if index != -1:
+                self.serial_port_input.setCurrentIndex(index)
+            # self.serial_port_input.setText(config.get("serial_port", ""))
             self.baud_rate_input.setCurrentText(config.get("baud_rate", "9600"))
             self.instrument_id_input.setText(config.get("instrument_id", ""))
             for i, output in enumerate(self.outputs, start=1):
@@ -92,12 +96,22 @@ class PowerSupplyGUI(QMainWindow):
         config_layout = QVBoxLayout()
         config_layout.setAlignment(Qt.AlignTop)  # Align elements to the top
 
+        def populate_serial_ports():
+            """Populate the serial port dropdown with available ports."""
+            self.serial_port_input.clear()
+            ports = self.power_supply.list_resources()
+            for port in ports:
+                self.serial_port_input.addItem(port)
+
         # Serial port input
         serial_port_label = QLabel("Serial Port:")
-        self.serial_port_input = QLineEdit()
-        self.serial_port_input.setPlaceholderText("Enter serial port")
+        self.serial_port_input = QComboBox()
+        self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.clicked.connect(populate_serial_ports)
         config_layout.addWidget(serial_port_label)
         config_layout.addWidget(self.serial_port_input)
+        config_layout.addWidget(self.refresh_button)
+        populate_serial_ports()  # Populate the dropdown initially
 
         # Baud rate input
         baud_rate_label = QLabel("Baud Rate:")
@@ -123,6 +137,16 @@ class PowerSupplyGUI(QMainWindow):
         self.terminal = LogTerminal()
         config_layout.addWidget(self.terminal)
 
+        # Add input field and send button below the terminal
+        input_layout = QHBoxLayout()
+        self.input_field = QLineEdit()
+        self.input_field.setPlaceholderText("Enter command")
+        self.send_button = QPushButton("Send")
+        self.send_button.clicked.connect(self.on_send_clicked)
+        input_layout.addWidget(self.input_field)
+        input_layout.addWidget(self.send_button)
+        config_layout.addLayout(input_layout)
+
         # Wrap the config layout in a QWidget
         config_container = QWidget()
         config_container.setLayout(config_layout)
@@ -135,10 +159,10 @@ class PowerSupplyGUI(QMainWindow):
         control_layout = QVBoxLayout()
 
         # Add title
-        title_label = QLabel("HP 6626A Power Supply Control")
-        title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
-        control_layout.addWidget(title_label)
+        self.title_label = QLabel("HP 6626A Power Supply Control")
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        control_layout.addWidget(self.title_label)
 
         # Grid layout for outputs
         self.output_grid = QGridLayout()  # Create the grid layout
@@ -224,6 +248,7 @@ class PowerSupplyGUI(QMainWindow):
         on_off_button.setCheckable(True)
         on_off_button.setFixedHeight(40)
         on_off_button.setStyleSheet("font-size: 18px; font-weight: bold;")
+        on_off_button.setEnabled(False)  # Set to disabled by default
         on_off_button.toggled.connect(
             lambda checked, voltage_out=voltage_out, current_out=current_out: self.on_on_off_toggled(
                 checked, voltage_out, current_out
@@ -472,10 +497,15 @@ class PowerSupplyGUI(QMainWindow):
             current_out.setStyleSheet("")
             self.power_supply.turn_off(output_index)
 
+    def set_on_off_buttons_enabled(self, enabled):
+        """Enable or disable all ON/OFF buttons."""
+        for output in self.outputs:
+            output["on_off_button"].setEnabled(enabled)
+
     def on_connection_toggled(self, checked):
         """Handle the toggling of the connection button."""
         if checked:
-            serial_port = self.serial_port_input.text()
+            serial_port = self.serial_port_input.currentText()
             baud_rate = self.baud_rate_input.currentText()
             instrument_id = self.instrument_id_input.text()
             # Implement the logic to open the connection
@@ -489,7 +519,10 @@ class PowerSupplyGUI(QMainWindow):
                 self.terminal.log_debug(
                     f"Connected to {serial_port} at {baud_rate} baud with instrument ID {instrument_id}"
                 )
-            except PowerSupplyError as e:
+                self.set_on_off_buttons_enabled(True)
+                # make connect button grren
+                self.connection_button.setStyleSheet("background-color: green;")
+            except Exception as e:
                 # Log to the terminal
                 self.terminal.log_error(str(e))
                 self.connection_button.setChecked(False)
@@ -501,6 +534,19 @@ class PowerSupplyGUI(QMainWindow):
                 False
             )  # Disable the set button when disconnected
             self.terminal.log_debug("Disconnected from power supply")
+            self.set_on_off_buttons_enabled(False)
+
+    def on_send_clicked(self):
+        """Handle the send button click event."""
+        command = self.input_field.text()
+        if command:
+            try:
+                self.terminal.log_debug(f"SEND: {command}")
+                response = self.power_supply.send_command(command)
+                self.terminal.log_debug(f"RECV: {response}")
+            except PowerSupplyError as e:
+                self.terminal.log_error(str(e))
+            self.input_field.clear()
 
 
 def load_config():
@@ -521,7 +567,7 @@ def save_current_settings(window):
     print("Saving current settings...")
     """Save current settings from the GUI."""
     config = {
-        "serial_port": window.serial_port_input.text(),
+        "serial_port": window.serial_port_input.currentText(),
         "baud_rate": window.baud_rate_input.currentText(),
         "instrument_id": window.instrument_id_input.text(),
     }
@@ -542,8 +588,6 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # setup stylesheet
-    app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
-    # or in new API
     app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyqt5"))
 
     config = load_config()
