@@ -8,7 +8,7 @@ class PowerSupplyError(Exception):
 
 
 class PowerSupply:
-    def __init__(self):
+    def __init__(self, debug=False, mock=False):
         # Initialize the power supply
         self.channels = {
             1: False,
@@ -17,6 +17,8 @@ class PowerSupply:
             4: False,
         }  # Example state tracking
         self.connection = False
+        self.debug = debug
+        self.mock = mock
         self.rm = pyvisa.ResourceManager()
         print(self.rm.list_resources())
 
@@ -25,8 +27,11 @@ class PowerSupply:
         Prepends the module prefix to all commands and sends them.
         :param command: The SCPI command to send (without the module prefix).
         """
-        full_command = f"OUTPUT {self.module_id}; {command}"
-        self.instrument.write(full_command)
+        full_command = f'OUTPUT {self.module_id}; "{command}"'
+        if self.debug:
+            print(f"Sending command: {full_command}")
+        if not self.mock:
+            self.instrument.write(full_command)
 
     def _query_command(self, command):
         """
@@ -35,7 +40,10 @@ class PowerSupply:
         :return: The response from the instrument.
         """
         full_command = f"OUTPUT {self.module_id}; {command}"
-        return self.instrument.query(full_command)
+        if self.debug:
+            print(f"Sending query: {full_command}")
+        if not self.mock:
+            return self.instrument.query(full_command)
 
     def _init_instrument(self):
         """
@@ -69,12 +77,13 @@ class PowerSupply:
         if not serial_port or not baudrate or not instrument_id:
             raise PowerSupplyError("Invalid connection parameters.")
 
-        self.instrument = self.rm.open_resource(serial_port)
-        self.instrument.baud_rate = baudrate
-        self.instrument.timeout = timeout
         self.module_id = instrument_id
-        # TODO handle error
-        print(f"Connected to: {self.instrument.query('*IDN?')}")
+        if not self.mock:
+            self.instrument = self.rm.open_resource(serial_port)
+            self.instrument.baud_rate = baudrate
+            self.instrument.timeout = timeout
+            # TODO handle error
+            print(f"Connected to: {self.instrument.query('*IDN?')}")
         self.connection = True
         print(
             f"Connected to power supply on {serial_port} with baudrate {baudrate} and instrument ID {instrument_id}"
@@ -116,8 +125,6 @@ class PowerSupply:
         """
         if not self.connection:
             raise PowerSupplyError("Power supply is not connected.")
-        if not self.channels.get(channel, False):
-            raise PowerSupplyError(f"Channel {channel} is not turned on.")
         if voltage < 0:
             raise PowerSupplyError("Failed to communicate with power supply.")
         print(f"Setting voltage of channel {channel} to {voltage}V")
@@ -136,8 +143,6 @@ class PowerSupply:
         """
         if not self.connection:
             raise PowerSupplyError("Power supply is not connected.")
-        if not self.channels.get(channel, False):
-            raise PowerSupplyError(f"Channel {channel} is not turned on.")
         if current < 0:
             raise PowerSupplyError("Failed to communicate with power supply.")
         print(f"Setting current limit of channel {channel} to {current}A")
@@ -177,7 +182,7 @@ class PowerSupply:
             raise PowerSupplyError("Failed to communicate with power supply.")
         self.channels[channel] = True
         print(f"Turning on channel {channel}")
-        self._send_command(f"OUT {channel},ON")
+        self._send_command(f"OUT {channel},1")
 
     def disable_output(self, channel):
         """
@@ -195,7 +200,7 @@ class PowerSupply:
             raise PowerSupplyError("Failed to communicate with power supply.")
         self.channels[channel] = False
         print(f"Turning off channel {channel}")
-        self._send_command(f"OUT {channel},OFF")
+        self._send_command(f"OUT {channel},0")
 
     def set_overvoltage_protection(self, channel, voltage):
         """
@@ -225,6 +230,12 @@ class PowerSupply:
         :param channel: Output channel number
         :return: Measured output voltage in volts
         """
+        if not self.connection:
+            raise PowerSupplyError("Power supply is not connected.")
+        if channel not in self.channels:
+            raise PowerSupplyError("Failed to communicate with power supply.")
+        if not self.channels.get(channel, False):
+            raise PowerSupplyError(f"Channel {channel} is not turned on.")
         return float(self._query_command(f"VOUT? {channel}"))
 
     def get_output_current(self, channel):
@@ -233,6 +244,12 @@ class PowerSupply:
         :param channel: Output channel number
         :return: Measured output current in amperes
         """
+        if not self.connection:
+            raise PowerSupplyError("Power supply is not connected.")
+        if channel not in self.channels:
+            raise PowerSupplyError("Failed to communicate with power supply.")
+        if not self.channels.get(channel, False):
+            raise PowerSupplyError(f"Channel {channel} is not turned on.")
         return float(self._query_command(f"IOUT? {channel}"))
 
     def get_programmed_voltage(self, channel):

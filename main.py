@@ -52,7 +52,7 @@ class PowerSupplyGUI(QMainWindow):
         )  # Adjusted width to accommodate config panel
 
         # Create an instance of PowerSupply
-        self.power_supply = PowerSupply()
+        self.power_supply = PowerSupply(debug=True, mock=True)
 
         # Create central widget
         central_widget = QWidget()
@@ -457,7 +457,7 @@ class PowerSupplyGUI(QMainWindow):
             # Call the power supply methods
             output_index = self.outputs.index(self.selected_output) + 1
             self.power_supply.set_voltage(output_index, voltage_value)
-            self.power_supply.set_current(output_index, current_value)
+            self.power_supply.set_current_limit(output_index, current_value)
         except ValueError:
             print("Invalid input for voltage or current!")
 
@@ -476,7 +476,7 @@ class PowerSupplyGUI(QMainWindow):
         if checked:
             print("Output turned ON.")
             try:
-                self.power_supply.turn_on(output_index)
+                self.power_supply.enable_output(output_index)
                 sender.setText("ON")
                 sender.setStyleSheet(
                     "background-color: green; font-size: 18px; font-weight: bold;"
@@ -495,7 +495,7 @@ class PowerSupplyGUI(QMainWindow):
             # Reset the color of the voltage_out digits
             voltage_out.setStyleSheet("")
             current_out.setStyleSheet("")
-            self.power_supply.turn_off(output_index)
+            self.power_supply.disable_output(output_index)
 
     def set_on_off_buttons_enabled(self, enabled):
         """Enable or disable all ON/OFF buttons."""
