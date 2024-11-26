@@ -18,7 +18,12 @@ from PyQt5.QtWidgets import QLCDNumber
 import qdarkstyle
 import json
 import os
-from power_supply import PowerSupply, PowerSupplyError  # Import the PowerSupply class
+from PyQt5.QtCore import QThread, pyqtSignal, QTimer
+from power_supply import (
+    PowerSupply,
+    PowerSupplyError,
+    PowerSupplyChannelNotEnabledError,
+)  # Import the PowerSupply class
 
 CONFIG_FILE = "./config.json"
 
@@ -40,6 +45,36 @@ class LogTerminal(QTextEdit):
     def log_debug(self, message):
         """Log a debug message in the terminal."""
         self.append(f'<span style="color: green;">DEBUG: {message}</span>')
+
+
+class VoltageMonitorThread(QThread):
+    realtime_data_updated = pyqtSignal(
+        int, float, float
+    )  # Signal to emit voltage and current updates
+
+    def __init__(self, power_supply, interval=200):
+        super().__init__()
+        self.power_supply = power_supply
+        self.interval = interval
+        self.running = False
+
+    def run(self):
+        self.running = True
+        while self.running:
+            for channel in range(1, 5):
+                try:
+                    voltage = self.power_supply.get_output_voltage(channel)
+                    current = self.power_supply.get_output_current(channel)
+                    print(f"Channel {channel} voltage: {voltage}V, current: {current}A")
+                    self.realtime_data_updated.emit(channel, voltage, current)
+                except PowerSupplyChannelNotEnabledError as e:
+                    pass  # Ignore not enabled channels
+                except PowerSupplyError as e:
+                    print(f"Error reading voltage for channel {channel}: {e}")
+            self.msleep(self.interval)
+
+    def stop(self):
+        self.running = False
 
 
 class PowerSupplyGUI(QMainWindow):
@@ -72,6 +107,16 @@ class PowerSupplyGUI(QMainWindow):
         # Set the main layout
         central_widget.setLayout(main_layout)
 
+        # Initialize voltage history
+        self.voltage_history = {i: [] for i in range(1, 5)}
+        self.current_hsitory = {i: [] for i in range(1, 5)}
+
+        # Start the voltage monitor thread
+        self.voltage_monitor_thread = VoltageMonitorThread(self.power_supply)
+        self.voltage_monitor_thread.realtime_data_updated.connect(
+            self.update_voltage_history
+        )
+
         if config:
             saved_serial_port = config.get("serial_port", "")
             index = self.serial_port_input.findText(saved_serial_port)
@@ -88,8 +133,27 @@ class PowerSupplyGUI(QMainWindow):
                 output["current_out"].display(
                     f"{output_config.get('current', '0.000'):.3f}"
                 )
-                # if output_config.get("on", False):
-                # output["on_off_button"].setChecked(True)
+
+    def update_voltage_history(self, channel, voltage, current):
+        """Update the voltage history for a specific channel."""
+        self.voltage_history[channel].append(voltage)
+        self.current_hsitory[channel].append(current)
+        if len(self.voltage_history[channel]) > 100:  # Limit history to 100 entries
+            self.voltage_history[channel].pop(0)
+            self.current_hsitory[channel].pop(0)
+
+        # TODO: Update the plot and ouput with the new data
+        # update volatge and current on all outputs
+        self.outputs[channel - 1]["voltage_out"].display(f"{voltage:.3f}")
+        self.outputs[channel - 1]["current_out"].display(f"{current:.3f}")
+
+    def closeEvent(self, event):
+        """Handle the window close event to stop the thread."""
+        self.voltage_monitor_thread.stop()
+        self.voltage_monitor_thread.wait()
+        print("Voltage monitor thread stopped.")
+        self.voltage_history.clear()
+        super().closeEvent(event)
 
     def create_config_panel(self):
         """Create the configuration panel."""
@@ -442,6 +506,7 @@ class PowerSupplyGUI(QMainWindow):
         """Apply the voltage and current to the selected output."""
         if not hasattr(self, "selected_output") or not self.selected_output:
             print("No output selected!")
+            self.terminal.log_error("No output selected!")
             return
 
         voltage = self.voltage_input.text()
@@ -497,6 +562,19 @@ class PowerSupplyGUI(QMainWindow):
             current_out.setStyleSheet("")
             self.power_supply.disable_output(output_index)
 
+        if checked and not self.voltage_monitor_thread.isRunning():
+            self.voltage_monitor_thread.start()
+        elif self.power_supply.get_num_enabled_channels() == 0:
+            self.voltage_monitor_thread.stop()
+
+        if not checked:
+            voltage_out.display(
+                f"{self.power_supply.get_programmed_voltage(output_index):.3f}"
+            )
+            current_out.display(
+                f"{self.power_supply.get_programmed_current_limit(output_index):.3f}"
+            )
+
     def set_on_off_buttons_enabled(self, enabled):
         """Enable or disable all ON/OFF buttons."""
         for output in self.outputs:
@@ -522,6 +600,17 @@ class PowerSupplyGUI(QMainWindow):
                 self.set_on_off_buttons_enabled(True)
                 # make connect button grren
                 self.connection_button.setStyleSheet("background-color: green;")
+
+                if config:
+                    for i, output in enumerate(self.outputs, start=1):
+                        output_config = config.get(f"output_{i}", {})
+                        self.power_supply.set_voltage(
+                            i, output_config.get("voltage", 0)
+                        )
+                        self.power_supply.set_current_limit(
+                            i, output_config.get("current", 0)
+                        )
+
             except Exception as e:
                 # Log to the terminal
                 self.terminal.log_error(str(e))
@@ -573,9 +662,12 @@ def save_current_settings(window):
     }
     for i, output in enumerate(window.outputs, start=1):
         config[f"output_{i}"] = {
-            "voltage": output["voltage_out"].value(),
-            "current": output["current_out"].value(),
             "on": output["on_off_button"].isChecked(),
+        }
+    for i in range(1, 5):
+        config[f"output_{i}"] = {
+            "voltage": window.power_supply.get_programmed_voltage(i),
+            "current": window.power_supply.get_programmed_current_limit(i),
         }
     print(config)
     save_config(config)

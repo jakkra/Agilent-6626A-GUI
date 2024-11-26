@@ -1,8 +1,15 @@
+import random
 import pyvisa
 
 
 class PowerSupplyError(Exception):
     """Custom exception for power supply errors."""
+
+    pass
+
+
+class PowerSupplyChannelNotEnabledError(PowerSupplyError):
+    """Custom exception for power supply when channel is not enabled."""
 
     pass
 
@@ -16,11 +23,22 @@ class PowerSupply:
             3: False,
             4: False,
         }  # Example state tracking
+        self.set_voltages = {
+            1: 0.0,
+            2: 0.0,
+            3: 0.0,
+            4: 0.0,
+        }
+        self.set_currents = {
+            1: 0.0,
+            2: 0.0,
+            3: 0.0,
+            4: 0.0,
+        }
         self.connection = False
         self.debug = debug
         self.mock = mock
         self.rm = pyvisa.ResourceManager()
-        print(self.rm.list_resources())
 
     def _send_command(self, command):
         """
@@ -129,6 +147,7 @@ class PowerSupply:
             raise PowerSupplyError("Failed to communicate with power supply.")
         print(f"Setting voltage of channel {channel} to {voltage}V")
         self._send_command(f"VSET {channel},{voltage}")
+        self.set_voltages[channel] = voltage
 
     def set_current_limit(self, channel, current):
         """
@@ -147,6 +166,7 @@ class PowerSupply:
             raise PowerSupplyError("Failed to communicate with power supply.")
         print(f"Setting current limit of channel {channel} to {current}A")
         self._send_command(f"ISET {channel},{current}")
+        self.set_currents[channel] = current
 
     def set_voltage_range(self, channel, voltage_range):
         """
@@ -236,6 +256,8 @@ class PowerSupply:
             raise PowerSupplyError("Failed to communicate with power supply.")
         if not self.channels.get(channel, False):
             raise PowerSupplyError(f"Channel {channel} is not turned on.")
+        if self.mock:
+            return self.get_programmed_voltage(channel) + (random.random() - 0.5) * 0.1
         return float(self._query_command(f"VOUT? {channel}"))
 
     def get_output_current(self, channel):
@@ -249,7 +271,14 @@ class PowerSupply:
         if channel not in self.channels:
             raise PowerSupplyError("Failed to communicate with power supply.")
         if not self.channels.get(channel, False):
-            raise PowerSupplyError(f"Channel {channel} is not turned on.")
+            raise PowerSupplyChannelNotEnabledError(
+                f"Channel {channel} is not turned on."
+            )
+        if self.mock:
+            return (
+                self.get_programmed_current_limit(channel)
+                + (random.random() - 0.5) * 0.1
+            )
         return float(self._query_command(f"IOUT? {channel}"))
 
     def get_programmed_voltage(self, channel):
@@ -258,6 +287,8 @@ class PowerSupply:
         :param channel: Output channel number
         :return: Programmed voltage in volts
         """
+        if self.mock:
+            return self.set_voltages[channel]
         return float(self._query_command(f"VSET? {channel}"))
 
     def get_programmed_current_limit(self, channel):
@@ -266,6 +297,8 @@ class PowerSupply:
         :param channel: Output channel number
         :return: Programmed current limit in amperes
         """
+        if self.mock:
+            return self.set_currents[channel]
         return float(self._query_command(f"ISET? {channel}"))
 
     def send_raw_command(self, command):
@@ -292,3 +325,11 @@ class PowerSupply:
         # response = "OK"  # Simulated response
         # print(f"Received response: {response}")
         return "TODO: Implement response"
+
+    def get_num_enabled_channels(self):
+        """
+        Get the number of enabled channels.
+        :return: The number of enabled channels
+        """
+        print("Number of enabled channels: ", sum(self.channels.values()))
+        return sum(self.channels.values())
