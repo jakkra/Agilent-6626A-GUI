@@ -18,12 +18,13 @@ from PyQt5.QtWidgets import QLCDNumber
 import qdarkstyle
 import json
 import os
-from PyQt5.QtCore import QThread, pyqtSignal, QTimer
+from PyQt5.QtCore import QThread, pyqtSignal
 from power_supply import (
     PowerSupply,
     PowerSupplyError,
     PowerSupplyChannelNotEnabledError,
-)  # Import the PowerSupply class
+)
+from plot_window import PlotWindow
 
 CONFIG_FILE = "./config.json"
 
@@ -109,7 +110,8 @@ class PowerSupplyGUI(QMainWindow):
 
         # Initialize voltage history
         self.voltage_history = {i: [] for i in range(1, 5)}
-        self.current_hsitory = {i: [] for i in range(1, 5)}
+        self.current_history = {i: [] for i in range(1, 5)}
+        self.plot_windows = {i: PlotWindow(i) for i in range(1, 5)}
 
         # Start the voltage monitor thread
         self.voltage_monitor_thread = VoltageMonitorThread(self.power_supply)
@@ -137,22 +139,29 @@ class PowerSupplyGUI(QMainWindow):
     def update_voltage_history(self, channel, voltage, current):
         """Update the voltage history for a specific channel."""
         self.voltage_history[channel].append(voltage)
-        self.current_hsitory[channel].append(current)
+        self.current_history[channel].append(current)
         if len(self.voltage_history[channel]) > 100:  # Limit history to 100 entries
             self.voltage_history[channel].pop(0)
-            self.current_hsitory[channel].pop(0)
+            self.current_history[channel].pop(0)
 
-        # TODO: Update the plot and ouput with the new data
-        # update volatge and current on all outputs
+        # Update voltage and current on all outputs
         self.outputs[channel - 1]["voltage_out"].display(f"{voltage:.3f}")
         self.outputs[channel - 1]["current_out"].display(f"{current:.3f}")
+
+        self.plot_windows[channel].update_plot(
+            self.current_history[channel], self.voltage_history[channel]
+        )
 
     def closeEvent(self, event):
         """Handle the window close event to stop the thread."""
         self.voltage_monitor_thread.stop()
         self.voltage_monitor_thread.wait()
         print("Voltage monitor thread stopped.")
-        self.voltage_history.clear()
+
+        # Close all plot windows
+        for plot_window in self.plot_windows.values():
+            plot_window.close()
+
         super().closeEvent(event)
 
     def create_config_panel(self):
@@ -207,6 +216,7 @@ class PowerSupplyGUI(QMainWindow):
         self.input_field.setPlaceholderText("Enter command")
         self.send_button = QPushButton("Send")
         self.send_button.clicked.connect(self.on_send_clicked)
+        self.input_field.returnPressed.connect(self.send_button.click)
         input_layout.addWidget(self.input_field)
         input_layout.addWidget(self.send_button)
         config_layout.addLayout(input_layout)
@@ -235,10 +245,10 @@ class PowerSupplyGUI(QMainWindow):
         self.outputs = []  # List to store references to each output section
 
         output_sections = [
-            self.create_output_section("Output 1", "#00FF00"),  # Green
-            self.create_output_section("Output 2", "#0000FF"),  # Blue
-            self.create_output_section("Output 3", "#FFFF00"),  # Yellow
-            self.create_output_section("Output 4", "#800080"),  # Purple
+            self.create_output_section(1, "Output 1", "#00FF00"),  # Green
+            self.create_output_section(2, "Output 2", "#0000FF"),  # Blue
+            self.create_output_section(3, "Output 3", "#FFFF00"),  # Yellow
+            self.create_output_section(4, "Output 4", "#800080"),  # Purple
         ]
 
         for i, output_section in enumerate(output_sections, start=1):
@@ -265,9 +275,10 @@ class PowerSupplyGUI(QMainWindow):
     def keyPressEvent(self, event):
         """Override keyPressEvent to handle Enter key press."""
         if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
-            self.on_set_clicked()
+            if not self.input_field.hasFocus():
+                self.on_set_clicked()
 
-    def create_output_section(self, title, color):
+    def create_output_section(self, channel, title, color):
         """Create a section for one power supply output."""
         layout = QVBoxLayout()
 
@@ -301,11 +312,17 @@ class PowerSupplyGUI(QMainWindow):
         current_out.display("0.000")
         current_out.setFixedSize(225, 75)  # Set fixed size for larger display
 
+        plot_button = QPushButton(f"Open plot")
+        plot_button.clicked.connect(
+            lambda checked, ch=channel: self.open_plot_window(ch)
+        )
+
         # Layout for output values
         layout.addWidget(QLabel("Voltage Out (V):"))
         layout.addWidget(voltage_out)
         layout.addWidget(QLabel("Current Max Out (A):"))
         layout.addWidget(current_out)
+        layout.addWidget(plot_button)
 
         # ON/OFF toggle button
         on_off_button = QPushButton("OFF")
@@ -433,8 +450,8 @@ class PowerSupplyGUI(QMainWindow):
         h_layout2.addWidget(current_inc_button)
 
         current_dec_button = QPushButton("-")
-        current_dec_button.setFixedSize(50, 30)  # Set button size
-        current_dec_button.setStyleSheet("font-size: 16px;")  # Increase font size
+        current_dec_button.setFixedSize(50, 30)
+        current_dec_button.setStyleSheet("font-size: 16px;")
         current_dec_button.clicked.connect(
             lambda: self.increment_value(self.current_input, -0.1)
         )
@@ -444,12 +461,10 @@ class PowerSupplyGUI(QMainWindow):
 
         # Set button
         self.set_button = QPushButton("Set")
-        self.set_button.setStyleSheet(
-            "font-size: 26px; padding: 5px;"
-        )  # Increase font size to 30px
-        self.set_button.setFixedSize(200, 50)  # Set button size to 200x70
+        self.set_button.setStyleSheet("font-size: 26px; padding: 5px;")
+        self.set_button.setFixedSize(200, 50)
         self.set_button.clicked.connect(self.on_set_clicked)
-        self.set_button.setEnabled(False)  # Disable the set button initially
+        self.set_button.setEnabled(False)
 
         # Center the set button
         button_layout = QHBoxLayout()
@@ -636,6 +651,9 @@ class PowerSupplyGUI(QMainWindow):
             except PowerSupplyError as e:
                 self.terminal.log_error(str(e))
             self.input_field.clear()
+
+    def open_plot_window(self, channel):
+        self.plot_windows[channel].show()
 
 
 def load_config():
