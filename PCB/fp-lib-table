@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "supply_connectors")(type "KiCad")(uri "${KIPRJMOD}/supply_connectors.pretty")(options "")(descr ""))
+)

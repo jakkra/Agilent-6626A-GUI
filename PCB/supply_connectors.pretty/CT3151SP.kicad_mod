@@ -1,0 +1,149 @@
+(footprint "CT3151SP"
+	(version 20240108)
+	(generator "pcbnew")
+	(generator_version "8.0")
+	(layer "F.Cu")
+	(property "Reference" "REF**"
+		(at 0 -0.5 0)
+		(unlocked yes)
+		(layer "F.SilkS")
+		(uuid "2b65a130-7126-41fe-bfe5-5cc3e3d6e352")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.1)
+			)
+		)
+	)
+	(property "Value" "CT3151SP"
+		(at 0 1 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "ca9eb432-3f94-4eec-91a6-93b83cb42f31")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Footprint" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "3f05fed0-b70e-4d0f-b7a7-ac7edcdb8330")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Datasheet" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "28b81d8d-bf0b-43a3-a92e-4a213ba6d65d")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(property "Description" ""
+		(at 0 0 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(hide yes)
+		(uuid "fa3e4d46-b096-46bc-8c13-f3bedc9b1455")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(attr through_hole)
+	(fp_text user "${REFERENCE}"
+		(at 0 2.5 0)
+		(unlocked yes)
+		(layer "F.Fab")
+		(uuid "f754fedc-33a0-4850-9599-5763c8fc0931")
+		(effects
+			(font
+				(size 1 1)
+				(thickness 0.15)
+			)
+		)
+	)
+	(pad "1" thru_hole circle
+		(at -3.33 8.2)
+		(size 2.7 2.7)
+		(drill 1.7)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "9bc70403-cf29-424d-865a-a8c07cdbdd66")
+	)
+	(pad "2" thru_hole circle
+		(at 1.77 8.2)
+		(size 2.7 2.7)
+		(drill 1.7)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "7893022f-81ba-4488-aac6-91ba8400f62c")
+	)
+	(pad "3" thru_hole circle
+		(at -3.33 13.3)
+		(size 2.7 2.7)
+		(drill 1.7)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "2844e231-1634-4bd6-9e1e-271876158026")
+	)
+	(pad "4" thru_hole circle
+		(at 1.77 13.3)
+		(size 2.7 2.7)
+		(drill 1.7)
+		(layers "*.Cu" "*.Mask")
+		(remove_unused_layers no)
+		(uuid "9ac88556-dce7-472b-a84a-1371286c4a7d")
+	)
+	(model "${KICAD_PROJECT_CAD_DIR}/CT3151SP-2.igs"
+		(offset
+			(xyz -0.75 13.8 7.6)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz -90 0 0)
+		)
+	)
+	(model "${KICAD_PROJECT_CAD_DIR}/CT3151SP-0.igs"
+		(hide yes)
+		(offset
+			(xyz -0.75 13.8 7.6)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz -90 0 0)
+		)
+	)
+	(model "${KICAD_PROJECT_CAD_DIR}/CT3151SP-6.igs"
+		(hide yes)
+		(offset
+			(xyz -0.75 13.8 7.6)
+		)
+		(scale
+			(xyz 1 1 1)
+		)
+		(rotate
+			(xyz -90 0 0)
+		)
+	)
+)
