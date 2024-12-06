@@ -9236,7 +9236,6 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "64876bd1-bbed-4dd8-9f00-37af843af977")
 		(property "Reference" "#PWR05"
 			(at 170.18 45.72 0)
@@ -9247,12 +9246,13 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "S2-"
-			(at 170.18 36.83 0)
+		(property "Value" "S2+"
+			(at 168.402 37.084 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify left)
 			)
 		)
 		(property "Footprint" ""
@@ -10965,7 +10965,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "S2+"
+		(property "Value" "S2-"
 			(at 150.876 36.83 0)
 			(effects
 				(font
@@ -11021,7 +11021,6 @@
 		(in_bom yes)
 		(on_board yes)
 		(dnp no)
-		(fields_autoplaced yes)
 		(uuid "a894dcf8-a055-478d-ab4e-f0cdc281f89a")
 		(property "Reference" "#PWR038"
 			(at 76.2 45.72 0)
@@ -11032,12 +11031,13 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "S1-"
-			(at 76.2 36.83 0)
+		(property "Value" "S1+"
+			(at 74.168 36.83 0)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify left)
 			)
 		)
 		(property "Footprint" ""
@@ -12516,7 +12516,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "S1+"
+		(property "Value" "S1-"
 			(at 56.896 36.83 0)
 			(effects
 				(font
