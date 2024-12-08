@@ -23,8 +23,10 @@ from power_supply import (
     PowerSupply,
     PowerSupplyError,
     PowerSupplyChannelNotEnabledError,
+    PowerSupplyTimeoutError,
 )
 from plot_window import PlotWindow
+import time
 
 CONFIG_FILE = "./config.json"
 
@@ -53,25 +55,29 @@ class VoltageMonitorThread(QThread):
         int, float, float
     )  # Signal to emit voltage and current updates
 
-    def __init__(self, power_supply, interval=200):
+    def __init__(self, power_supply, interval=100):
         super().__init__()
         self.power_supply = power_supply
         self.interval = interval
         self.running = False
 
     def run(self):
+        print("Voltage monitor thread started.")
         self.running = True
         while self.running:
             for channel in range(1, 5):
                 try:
                     voltage = self.power_supply.get_output_voltage(channel)
                     current = self.power_supply.get_output_current(channel)
-                    print(f"Channel {channel} voltage: {voltage}V, current: {current}A")
+                    # print(f"Channel {channel} voltage: {voltage}V, current: {current}A")
                     self.realtime_data_updated.emit(channel, voltage, current)
                 except PowerSupplyChannelNotEnabledError as e:
                     pass  # Ignore not enabled channels
+                except PowerSupplyTimeoutError as e:
+                    pass
                 except PowerSupplyError as e:
-                    print(f"Error reading voltage for channel {channel}: {e}")
+                    pass
+
             self.msleep(self.interval)
 
     def stop(self):
@@ -88,7 +94,7 @@ class PowerSupplyGUI(QMainWindow):
         )  # Adjusted width to accommodate config panel
 
         # Create an instance of PowerSupply
-        self.power_supply = PowerSupply(debug=True, mock=True)
+        self.power_supply = PowerSupply(debug=False, mock=False)
 
         # Create central widget
         central_widget = QWidget()
@@ -143,6 +149,11 @@ class PowerSupplyGUI(QMainWindow):
         if len(self.voltage_history[channel]) > 100:  # Limit history to 100 entries
             self.voltage_history[channel].pop(0)
             self.current_history[channel].pop(0)
+
+        # Since QT signal may not be handled when the signalling thread is stopped,
+        # check if the channel is enabled, to avoid overwriting wrong values in UI.
+        if not self.power_supply.is_channel_enabled(channel):
+            return
 
         # Update voltage and current on all outputs
         self.outputs[channel - 1]["voltage_out"].display(f"{voltage:.3f}")
@@ -581,6 +592,8 @@ class PowerSupplyGUI(QMainWindow):
             self.voltage_monitor_thread.start()
         elif self.power_supply.get_num_enabled_channels() == 0:
             self.voltage_monitor_thread.stop()
+            self.voltage_monitor_thread.wait()
+            print("Voltage monitor thread stopped.")
 
         if not checked:
             voltage_out.display(
@@ -646,7 +659,7 @@ class PowerSupplyGUI(QMainWindow):
         if command:
             try:
                 self.terminal.log_debug(f"SEND: {command}")
-                response = self.power_supply.send_command(command)
+                response = self.power_supply._query_command(command)
                 self.terminal.log_debug(f"RECV: {response}")
             except PowerSupplyError as e:
                 self.terminal.log_error(str(e))

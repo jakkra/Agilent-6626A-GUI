@@ -1,5 +1,7 @@
 import random
 import pyvisa
+import time
+import threading
 
 
 class PowerSupplyError(Exception):
@@ -10,6 +12,12 @@ class PowerSupplyError(Exception):
 
 class PowerSupplyChannelNotEnabledError(PowerSupplyError):
     """Custom exception for power supply when channel is not enabled."""
+
+    pass
+
+
+class PowerSupplyTimeoutError(PowerSupplyError):
+    """Custom exception for power supply when a timeout occurs."""
 
     pass
 
@@ -35,6 +43,7 @@ class PowerSupply:
             3: 0.0,
             4: 0.0,
         }
+        self.lock = threading.RLock()
         self.connection = False
         self.debug = debug
         self.mock = mock
@@ -45,11 +54,13 @@ class PowerSupply:
         Prepends the module prefix to all commands and sends them.
         :param command: The SCPI command to send (without the module prefix).
         """
-        full_command = f'OUTPUT {self.module_id}; "{command}"'
-        if self.debug:
-            print(f"Sending command: {full_command}")
-        if not self.mock:
-            self.instrument.write(full_command)
+        with self.lock:
+            full_command = f"OUTPUT {self.module_id}; {command}"
+            if self.debug:
+                print(f"Sending command: {full_command}")
+            if not self.mock:
+                self.instrument.write(full_command)
+            time.sleep(0.2)
 
     def _query_command(self, command):
         """
@@ -57,11 +68,23 @@ class PowerSupply:
         :param command: The SCPI query to send (without the module prefix).
         :return: The response from the instrument.
         """
-        full_command = f"OUTPUT {self.module_id}; {command}"
-        if self.debug:
-            print(f"Sending query: {full_command}")
-        if not self.mock:
-            return self.instrument.query(full_command)
+        with self.lock:
+            try:
+                full_command = f"OUTPUT {self.module_id}; {command}"
+                if self.debug:
+                    print(f"Sending query: {full_command}")
+                if not self.mock:
+                    res = self.instrument.query(full_command)
+                    if self.debug:
+                        print(f"Received response: {res}")
+                    return res
+            except pyvisa.errors.VisaIOError as e:
+                print(f"VisaIOError: {e}")
+                raise PowerSupplyTimeoutError(
+                    "Timeout occurred while communicating with power supply."
+                )
+            except Exception as e:
+                raise PowerSupplyError("Failed to communicate with power supply.")
 
     def _init_instrument(self):
         """
@@ -79,7 +102,7 @@ class PowerSupply:
         """
         return self.rm.list_resources()
 
-    def connect(self, serial_port, baudrate, instrument_id, timeout=5000):
+    def connect(self, serial_port, baudrate, instrument_id, timeout=2500):
         """
         Connect to the power supply.
 
@@ -100,9 +123,31 @@ class PowerSupply:
             self.instrument = self.rm.open_resource(serial_port)
             self.instrument.baud_rate = baudrate
             self.instrument.timeout = timeout
-            # TODO handle error
-            print(f"Connected to: {self.instrument.query('*IDN?')}")
+            self.instrument.read_termination = "\r"
         self.connection = True
+        # TODO handle error
+        self.send_raw_command("++auto 1")
+        time.sleep(0.1)
+        self.send_raw_command("++addr 5")
+        time.sleep(0.1)
+        self.send_raw_command("++eot_char 13")
+        time.sleep(0.1)
+        self.send_raw_command("++eot_enable 1")
+        time.sleep(1)
+        print(f"Connected to: {self._query_command(f'ID?')}")
+        attempts = 0
+        while attempts < 3:
+            try:
+                response = self._query_command(f"ID?")
+                print(f"Connected to: {response}")
+                break
+            except Exception as e:
+                attempts += 1
+                print(f"Attempt {attempts} failed: {e}")
+                if attempts >= 3:
+                    raise PowerSupplyError(
+                        "Failed to connect to power supply after 3 attempts."
+                    )
         print(
             f"Connected to power supply on {serial_port} with baudrate {baudrate} and instrument ID {instrument_id}"
         )
@@ -124,11 +169,12 @@ class PowerSupply:
         Raises:
         PowerSupplyError: If disconnection fails.
         """
-        if not self.connection:
-            raise PowerSupplyError("Failed to disconnect from power supply.")
-        self.instrument.close()
-        self.connection = False
-        print("Disconnected from power supply")
+        with self.lock:
+            if not self.connection:
+                raise PowerSupplyError("Failed to disconnect from power supply.")
+            self.instrument.close()
+            self.connection = False
+            print("Disconnected from power supply")
 
     def set_voltage(self, channel, voltage):
         """
@@ -141,13 +187,14 @@ class PowerSupply:
         Raises:
         PowerSupplyError: If the channel is not turned on or communication fails.
         """
-        if not self.connection:
-            raise PowerSupplyError("Power supply is not connected.")
-        if voltage < 0:
-            raise PowerSupplyError("Failed to communicate with power supply.")
-        print(f"Setting voltage of channel {channel} to {voltage}V")
-        self._send_command(f"VSET {channel},{voltage}")
-        self.set_voltages[channel] = voltage
+        with self.lock:
+            if not self.connection:
+                raise PowerSupplyError("Power supply is not connected.")
+            if voltage < 0:
+                raise PowerSupplyError("Failed to communicate with power supply.")
+            print(f"Setting voltage of channel {channel} to {voltage}V")
+            self._send_command(f"VSET {channel},{voltage}")
+            self.set_voltages[channel] = voltage
 
     def set_current_limit(self, channel, current):
         """
@@ -160,13 +207,14 @@ class PowerSupply:
         Raises:
         PowerSupplyError: If the channel is not turned on or communication fails.
         """
-        if not self.connection:
-            raise PowerSupplyError("Power supply is not connected.")
-        if current < 0:
-            raise PowerSupplyError("Failed to communicate with power supply.")
-        print(f"Setting current limit of channel {channel} to {current}A")
-        self._send_command(f"ISET {channel},{current}")
-        self.set_currents[channel] = current
+        with self.lock:
+            if not self.connection:
+                raise PowerSupplyError("Power supply is not connected.")
+            if current < 0:
+                raise PowerSupplyError("Failed to communicate with power supply.")
+            print(f"Setting current limit of channel {channel} to {current}A")
+            self._send_command(f"ISET {channel},{current}")
+            self.set_currents[channel] = current
 
     def set_voltage_range(self, channel, voltage_range):
         """
@@ -175,7 +223,8 @@ class PowerSupply:
         :param channel: Output channel number
         :param voltage_range: Voltage
         """
-        self._send_command(f"VRSET {channel},{voltage_range}")
+        with self.lock:
+            self._send_command(f"VRSET {channel},{voltage_range}")
 
     def set_current_range(self, channel, current_range):
         """
@@ -184,7 +233,8 @@ class PowerSupply:
         :param channel: Output channel number
         :param current_range: Current Amperes
         """
-        self._send_command(f"IRSET {channel},{current_range}")
+        with self.lock:
+            self._send_command(f"IRSET {channel},{current_range}")
 
     def enable_output(self, channel):
         """
@@ -196,13 +246,14 @@ class PowerSupply:
         Raises:
         PowerSupplyError: If communication fails.
         """
-        if not self.connection:
-            raise PowerSupplyError("Power supply is not connected.")
-        if channel not in self.channels:
-            raise PowerSupplyError("Failed to communicate with power supply.")
-        self.channels[channel] = True
-        print(f"Turning on channel {channel}")
-        self._send_command(f"OUT {channel},1")
+        with self.lock:
+            if not self.connection:
+                raise PowerSupplyError("Power supply is not connected.")
+            if channel not in self.channels:
+                raise PowerSupplyError("Failed to communicate with power supply.")
+            self.channels[channel] = True
+            print(f"Turning on channel {channel}")
+            self._send_command(f"OUT {channel},1")
 
     def disable_output(self, channel):
         """
@@ -214,13 +265,14 @@ class PowerSupply:
         Raises:
         PowerSupplyError: If communication fails.
         """
-        if not self.connection:
-            raise PowerSupplyError("Power supply is not connected.")
-        if channel not in self.channels:
-            raise PowerSupplyError("Failed to communicate with power supply.")
-        self.channels[channel] = False
-        print(f"Turning off channel {channel}")
-        self._send_command(f"OUT {channel},0")
+        with self.lock:
+            if not self.connection:
+                raise PowerSupplyError("Power supply is not connected.")
+            if channel not in self.channels:
+                raise PowerSupplyError("Failed to communicate with power supply.")
+            self.channels[channel] = False
+            print(f"Turning off channel {channel}")
+            self._send_command(f"OUT {channel},0")
 
     def set_overvoltage_protection(self, channel, voltage):
         """
@@ -228,21 +280,24 @@ class PowerSupply:
         :param channel: Output channel number
         :param voltage: OVP trip point in volts
         """
-        self._send_command(f"OVSET {channel},{voltage}")
+        with self.lock:
+            self._send_command(f"OVSET {channel},{voltage}")
 
     def enable_overcurrent_protection(self, channel):
         """
         Enables the overcurrent protection for the specified channel.
         :param channel: Output channel number
         """
-        self._send_command(f"OCP {channel},ON")
+        with self.lock:
+            self._send_command(f"OCP {channel},ON")
 
     def disable_overcurrent_protection(self, channel):
         """
         Disables the overcurrent protection for the specified channel.
         :param channel: Output channel number
         """
-        self._send_command(f"OCP {channel},OFF")
+        with self.lock:
+            self._send_command(f"OCP {channel},OFF")
 
     def get_output_voltage(self, channel):
         """
@@ -250,15 +305,21 @@ class PowerSupply:
         :param channel: Output channel number
         :return: Measured output voltage in volts
         """
-        if not self.connection:
-            raise PowerSupplyError("Power supply is not connected.")
-        if channel not in self.channels:
-            raise PowerSupplyError("Failed to communicate with power supply.")
-        if not self.channels.get(channel, False):
-            raise PowerSupplyError(f"Channel {channel} is not turned on.")
-        if self.mock:
-            return self.get_programmed_voltage(channel) + (random.random() - 0.5) * 0.1
-        return float(self._query_command(f"VOUT? {channel}"))
+        with self.lock:
+            if not self.connection:
+                raise PowerSupplyError("Power supply is not connected.")
+            if channel not in self.channels:
+                raise PowerSupplyError("Failed to communicate with power supply.")
+            if not self.channels.get(channel, False):
+                raise PowerSupplyError(f"Channel {channel} is not turned on.")
+            if self.mock:
+                return (
+                    self.get_programmed_voltage(channel) + (random.random() - 0.5) * 0.1
+                )
+            result = float(self._query_command(f"VOUT? {channel}"))
+            if result < 0:
+                result = 0.0
+            return result
 
     def get_output_current(self, channel):
         """
@@ -266,20 +327,21 @@ class PowerSupply:
         :param channel: Output channel number
         :return: Measured output current in amperes
         """
-        if not self.connection:
-            raise PowerSupplyError("Power supply is not connected.")
-        if channel not in self.channels:
-            raise PowerSupplyError("Failed to communicate with power supply.")
-        if not self.channels.get(channel, False):
-            raise PowerSupplyChannelNotEnabledError(
-                f"Channel {channel} is not turned on."
-            )
-        if self.mock:
-            return (
-                self.get_programmed_current_limit(channel)
-                + (random.random() - 0.5) * 0.1
-            )
-        return float(self._query_command(f"IOUT? {channel}"))
+        with self.lock:
+            if not self.connection:
+                raise PowerSupplyError("Power supply is not connected.")
+            if channel not in self.channels:
+                raise PowerSupplyError("Failed to communicate with power supply.")
+            if not self.channels.get(channel, False):
+                raise PowerSupplyChannelNotEnabledError(
+                    f"Channel {channel} is not turned on."
+                )
+            if self.mock:
+                return (
+                    self.get_programmed_current_limit(channel)
+                    + (random.random() - 0.5) * 0.1
+                )
+            return float(self._query_command(f"IOUT? {channel}"))
 
     def get_programmed_voltage(self, channel):
         """
@@ -287,9 +349,14 @@ class PowerSupply:
         :param channel: Output channel number
         :return: Programmed voltage in volts
         """
-        if self.mock:
-            return self.set_voltages[channel]
-        return float(self._query_command(f"VSET? {channel}"))
+        with self.lock:
+            if self.mock:
+                return self.set_voltages[channel]
+
+            result = float(self._query_command(f"VSET? {channel}"))
+            if result < 0:
+                result = 0.0
+            return result
 
     def get_programmed_current_limit(self, channel):
         """
@@ -297,9 +364,13 @@ class PowerSupply:
         :param channel: Output channel number
         :return: Programmed current limit in amperes
         """
-        if self.mock:
-            return self.set_currents[channel]
-        return float(self._query_command(f"ISET? {channel}"))
+        with self.lock:
+            if self.mock:
+                return self.set_currents[channel]
+            result = float(self._query_command(f"ISET? {channel}"))
+            if result < 0:
+                result = 0.0
+            return result
 
     def send_raw_command(self, command):
         """
@@ -314,22 +385,34 @@ class PowerSupply:
         Returns:
         str: The response from the power supply
         """
-        if not self.connection:
-            raise PowerSupplyError("Power supply is not connected.")
-        if not command:
-            raise PowerSupplyError("Command is empty.")
+        with self.lock:
+            if not self.connection:
+                raise PowerSupplyError("Power supply is not connected.")
+            if not command:
+                raise PowerSupplyError("Command is empty.")
 
-        # Simulate sending command and receiving response
-        print(f"Sending command: {command}")
-        self.instrument.write(command)
-        # response = "OK"  # Simulated response
-        # print(f"Received response: {response}")
-        return "TODO: Implement response"
+            # Simulate sending command and receiving response
+            if self.debug:
+                print(f"Sending command: {command}")
+            self.instrument.write(command)
+            # response = "OK"  # Simulated response
+            # print(f"Received response: {response}")
+            return "TODO: Implement response"
 
     def get_num_enabled_channels(self):
         """
         Get the number of enabled channels.
         :return: The number of enabled channels
         """
-        print("Number of enabled channels: ", sum(self.channels.values()))
-        return sum(self.channels.values())
+        with self.lock:
+            print("Number of enabled channels: ", sum(self.channels.values()))
+            return sum(self.channels.values())
+
+    def is_channel_enabled(self, channel):
+        """
+        Check if a channel is enabled.
+        :param channel: Channel number
+        :return: True if channel is enabled, False otherwise
+        """
+        with self.lock:
+            return self.channels.get(channel, False)

@@ -33,6 +33,11 @@ class PlotWindow(QWidget):
     def update_plot(self, voltage_data, current_data):
         self.plotWidget.clear()
         max_value = max(voltage_data)
+        min_value = min(voltage_data)
+        range_padding = 0.3 * (max_value - min_value)
+        y_min = min_value - range_padding
+        y_max = max_value + range_padding
+
         if max_value >= 1:
             self.plotWidget.setLabel("left", "Current (A)")
             self.plotWidget.plot(
@@ -40,6 +45,8 @@ class PlotWindow(QWidget):
             )
         elif max_value >= 0.001:
             self.plotWidget.setLabel("left", "Current (mA)")
+            y_min *= 1000
+            y_max *= 1000
             self.plotWidget.plot(
                 [x * 1000 for x in voltage_data],
                 pen="g",
@@ -49,6 +56,8 @@ class PlotWindow(QWidget):
             )
         else:
             self.plotWidget.setLabel("left", "Current (uA)")
+            y_min *= 1000000
+            y_max *= 1000000
             self.plotWidget.plot(
                 [x * 1000000 for x in voltage_data],
                 pen="g",
@@ -56,3 +65,5 @@ class PlotWindow(QWidget):
                 symbolSize=5,
                 symbolBrush=("g"),
             )
+
+        # self.plotWidget.setYRange(y_min, y_max)
