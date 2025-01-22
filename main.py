@@ -11,7 +11,9 @@ from PyQt5.QtWidgets import (
     QWidget,
     QComboBox,
     QTextEdit,
+    QSizePolicy
 )
+
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFontDatabase, QFont
 from PyQt5.QtWidgets import QLCDNumber
@@ -235,7 +237,7 @@ class PowerSupplyGUI(QMainWindow):
         # Wrap the config layout in a QWidget
         config_container = QWidget()
         config_container.setLayout(config_layout)
-        config_container.setFixedWidth(200)  # Set fixed width for config panel
+        config_container.setMaximumWidth(500)  # Set fixed width for config panel
 
         return config_container
 
@@ -247,12 +249,34 @@ class PowerSupplyGUI(QMainWindow):
         self.title_label = QLabel("HP 6626A Power Supply Control")
         self.title_label.setAlignment(Qt.AlignCenter)
         self.title_label.setStyleSheet("font-size: 18px; font-weight: bold;")
-        control_layout.addWidget(self.title_label)
+
+        # Create a horizontal layout for the title and fullscreen button
+        title_layout = QHBoxLayout()
+        title_layout.addWidget(self.title_label)
+
+        # Add fullscreen toggle button
+        self.fullscreen_button = QPushButton("Toggle Fullscreen")
+        self.fullscreen_button.setFixedHeight(40)
+        self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
+        title_layout.addWidget(self.fullscreen_button, alignment=Qt.AlignRight)
+
+        control_layout.addLayout(title_layout)
+
+        # Create a horizontal layout for the title and fullscreen button
+        title_layout = QHBoxLayout()
+        title_layout.addWidget(self.title_label)
+
+        # Add fullscreen toggle button
+        self.fullscreen_button = QPushButton("Toggle Fullscreen")
+        self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
+        title_layout.addWidget(self.fullscreen_button, alignment=Qt.AlignRight)
+
+        control_layout.addLayout(title_layout)
 
         # Grid layout for outputs
         self.output_grid = QGridLayout()  # Create the grid layout
         self.output_grid.setHorizontalSpacing(20)  # Set horizontal spacing
-        self.output_grid.setVerticalSpacing(20)  # Set vertical spacing
+        #self.output_grid.setVerticalSpacing(20)  # Set vertical spacing
         self.outputs = []  # List to store references to each output section
 
         output_sections = [
@@ -282,6 +306,13 @@ class PowerSupplyGUI(QMainWindow):
         control_container.setLayout(control_layout)
 
         return control_container
+    
+    def toggle_fullscreen(self):
+        """Toggle between fullscreen and normal window."""
+        if self.isFullScreen():
+            self.showNormal()
+        else:
+            self.showFullScreen()
 
     def keyPressEvent(self, event):
         """Override keyPressEvent to handle Enter key press."""
@@ -296,7 +327,7 @@ class PowerSupplyGUI(QMainWindow):
         # Section title
         section_title = QLabel(title)
         section_title.setAlignment(Qt.AlignCenter)
-        section_title.setFixedHeight(50)
+        #section_title.setFixedHeight(50)
         section_title.setStyleSheet(
             f"""
             font-size: 18px;
@@ -309,44 +340,53 @@ class PowerSupplyGUI(QMainWindow):
         """
         )
         layout.addWidget(section_title)
+        horizontal_layout = QHBoxLayout()
+        left_layout = QVBoxLayout()
+        right_layout = QVBoxLayout()
 
         # Display current voltage and current
         voltage_out = QLCDNumber()
         voltage_out.setDigitCount(7)  # Adjust digit count to accommodate 3 decimals
         voltage_out.setSegmentStyle(QLCDNumber.Flat)
         voltage_out.display("0.000")
-        voltage_out.setFixedSize(225, 75)  # Set fixed size for larger display
+        voltage_out.setFixedSize(190, 65)  # Set fixed size for larger display
 
         current_out = QLCDNumber()
         current_out.setDigitCount(7)  # Adjust digit count to accommodate 3 decimals
         current_out.setSegmentStyle(QLCDNumber.Flat)
         current_out.display("0.000")
-        current_out.setFixedSize(225, 75)  # Set fixed size for larger display
+        current_out.setFixedSize(190, 65)  # Set fixed size for larger display
 
         plot_button = QPushButton(f"Open plot")
+        plot_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         plot_button.clicked.connect(
             lambda checked, ch=channel: self.open_plot_window(ch)
         )
 
         # Layout for output values
-        layout.addWidget(QLabel("Voltage Out (V):"))
-        layout.addWidget(voltage_out)
-        layout.addWidget(QLabel("Current Max Out (A):"))
-        layout.addWidget(current_out)
-        layout.addWidget(plot_button)
+        left_layout.addWidget(QLabel("Voltage Out (V):"))
+        left_layout.addWidget(voltage_out)
+        left_layout.addWidget(QLabel("Current Max Out (A):"))
+        left_layout.addWidget(current_out)
+        right_layout.addWidget(plot_button)
 
         # ON/OFF toggle button
         on_off_button = QPushButton("OFF")
         on_off_button.setCheckable(True)
-        on_off_button.setFixedHeight(40)
+        #on_off_button.setFixedHeight(40)
         on_off_button.setStyleSheet("font-size: 18px; font-weight: bold;")
         on_off_button.setEnabled(False)  # Set to disabled by default
+        on_off_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         on_off_button.toggled.connect(
             lambda checked, voltage_out=voltage_out, current_out=current_out: self.on_on_off_toggled(
                 checked, voltage_out, current_out
             )
         )
-        layout.addWidget(on_off_button)
+        right_layout.addWidget(on_off_button)
+
+        horizontal_layout.addLayout(left_layout)
+        horizontal_layout.addLayout(right_layout)
+        layout.addLayout(horizontal_layout)
 
         # Container widget for the section
         container = QWidget()
@@ -716,6 +756,7 @@ if __name__ == "__main__":
     config = load_config()
     window = PowerSupplyGUI(config)
     window.show()
+    window.showFullScreen()
 
     # Save current settings when the application is about to quit
     app.aboutToQuit.connect(lambda: save_current_settings(window))
