@@ -617,7 +617,7 @@
   },
   "schematic": {
     "annotate_start_num": 0,
-    "bom_export_filename": "",
+    "bom_export_filename": "power_supply_front.csv",
     "bom_fmt_presets": [],
     "bom_fmt_settings": {
       "field_delimiter": ",",
@@ -667,11 +667,65 @@
           "label": "DNP",
           "name": "${DNP}",
           "show": true
+        },
+        {
+          "group_by": false,
+          "label": "#",
+          "name": "${ITEM_NUMBER}",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "CONFIG",
+          "name": "CONFIG",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Distributor",
+          "name": "Distributor",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "MANUFACTURER",
+          "name": "MANUFACTURER",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Mfr.",
+          "name": "Mfr.",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Mfr. No.",
+          "name": "Mfr. No.",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Order Number",
+          "name": "Order Number",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Order. No.",
+          "name": "Order. No.",
+          "show": true
+        },
+        {
+          "group_by": false,
+          "label": "Description",
+          "name": "Description",
+          "show": true
         }
       ],
       "filter_string": "",
       "group_symbols": true,
-      "name": "Grouped By Value",
+      "name": "",
       "sort_asc": true,
       "sort_field": "Reference"
     },
