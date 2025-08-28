@@ -29,6 +29,7 @@ from power_supply import (
     PowerSupplyTimeoutError,
 )
 from plot_window import PlotWindow
+from activity_monitor import ActivityMonitor
 import time
 
 CONFIG_FILE = "./config.json"
@@ -341,7 +342,7 @@ class PowerSupplyGUI(QMainWindow):
         )
 
     def closeEvent(self, event):
-        """Handle the window close event to stop the thread."""
+        """Handle the window close event to stop the threads."""
         self.voltage_monitor_thread.stop()
         self.voltage_monitor_thread.wait()
         print("Voltage monitor thread stopped.")
@@ -483,13 +484,6 @@ class PowerSupplyGUI(QMainWindow):
             self.showNormal()
         else:
             self.showFullScreen()
-
-    def keyPressEvent(self, event):
-        """Override keyPressEvent to handle Enter key press."""
-        if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
-            if not self.input_field.hasFocus():
-                # Enter key now does nothing since we use modal dialogs
-                pass
 
     def create_output_section(self, channel, title, color):
         """Create a section for one power supply output."""
@@ -774,11 +768,16 @@ if __name__ == "__main__":
     app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api="pyqt5"))
 
     config = load_config()
+
+    monitor = ActivityMonitor(timeout_ms=5 * 60 * 1000)
+    app.installEventFilter(monitor)
+
     window = PowerSupplyGUI(config)
     window.show()
     window.showFullScreen()
 
     # Save current settings when the application is about to quit
     app.aboutToQuit.connect(lambda: save_current_settings(window))
+    app.aboutToQuit.connect(monitor.cleanup)
 
     sys.exit(app.exec_())
