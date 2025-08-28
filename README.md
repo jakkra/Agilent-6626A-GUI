@@ -32,6 +32,7 @@ Used PyQt5 to design a decent looking UI to graphically interact with the power 
 Behind the scenes GPIB commands are sent to the power supply to make it do what we want.
 
 <img src=".github/ui.png" alt="front" style="height: auto; max-height: 600px;">
+<img src=".github/ui_small_screen.png" alt="front" style="height: auto; max-height: 600px;">
 
 ### GPIB Commands
 The control interface is quite simple. For example to set output 1 to 5V, max 0.1A it's as simple as this:

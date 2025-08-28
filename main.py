@@ -11,7 +11,8 @@ from PyQt5.QtWidgets import (
     QWidget,
     QComboBox,
     QTextEdit,
-    QSizePolicy
+    QSizePolicy,
+    QDialog,
 )
 
 from PyQt5.QtCore import Qt
@@ -31,6 +32,180 @@ from plot_window import PlotWindow
 import time
 
 CONFIG_FILE = "./config.json"
+
+
+class InputDialog(QDialog):
+    def __init__(
+        self, parent=None, channel=1, current_voltage=0.0, current_current=0.0
+    ):
+        super().__init__(parent)
+        self.channel = channel
+        self.voltage_value = current_voltage
+        self.current_value = current_current
+        self.setupUI()
+
+    def setupUI(self):
+        self.setWindowTitle(f"Set Output {self.channel} Values")
+        self.setModal(True)
+        self.setFixedSize(600, 400)
+
+        layout = QVBoxLayout()
+
+        # Title
+        title = QLabel(f"Output {self.channel} Settings")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 16px; font-weight: bold; margin: 5px;")
+        layout.addWidget(title)
+
+        # Load the seven-segment font
+        font_id = QFontDatabase.addApplicationFont("digital-7.ttf")
+        if font_id != -1:
+            font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
+            segment_font = QFont(font_family, 16)
+        else:
+            segment_font = QFont("Courier", 16)  # Fallback font
+
+        # Voltage section
+        voltage_group = QVBoxLayout()
+        voltage_label = QLabel("Voltage (V):")
+        voltage_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        voltage_group.addWidget(voltage_label)
+
+        voltage_input_row = QHBoxLayout()
+        self.voltage_input = QLineEdit()
+        self.voltage_input.setText(f"{self.voltage_value:.3f}")
+        self.voltage_input.setFont(segment_font)
+        self.voltage_input.setStyleSheet(
+            "border: 2px solid black; border-radius: 5px; padding: 8px; font-size: 20px; min-height: 40px;"
+        )
+        self.voltage_input.setFixedWidth(100)
+        voltage_input_row.addWidget(self.voltage_input)
+
+        # Voltage increment/decrement
+        v_dec = QPushButton("-")
+        v_dec.setStyleSheet(
+            "font-size: 20px; font-weight: bold; min-height: 50px; min-width: 50px;"
+        )
+        v_dec.clicked.connect(lambda: self.adjust_voltage(-0.1))
+        voltage_input_row.addWidget(v_dec)
+
+        v_inc = QPushButton("+")
+        v_inc.setStyleSheet(
+            "font-size: 20px; font-weight: bold; min-height: 50px; min-width: 50px;"
+        )
+        v_inc.clicked.connect(lambda: self.adjust_voltage(0.1))
+        voltage_input_row.addWidget(v_inc)
+
+        # Add some preset buttons in the same row
+        for voltage in [1.8, 3.0, 3.3]:
+            btn = QPushButton(f"{voltage}V")
+            btn.setStyleSheet("font-size: 14px; min-height: 50px; min-width: 60px;")
+            btn.clicked.connect(lambda _, v=voltage: self.set_voltage(v))
+            voltage_input_row.addWidget(btn)
+
+        voltage_group.addLayout(voltage_input_row)
+
+        # Second row with more voltage presets to fill the row
+        voltage_controls2 = QHBoxLayout()
+        for voltage in [4.2, 5.0, 12.0, 18.0, 20.0]:
+            btn = QPushButton(f"{voltage}V")
+            btn.setStyleSheet("font-size: 14px; min-height: 45px; min-width: 60px;")
+            btn.clicked.connect(lambda _, v=voltage: self.set_voltage(v))
+            voltage_controls2.addWidget(btn)
+        voltage_group.addLayout(voltage_controls2)
+        layout.addLayout(voltage_group)
+
+        # Current section
+        current_group = QVBoxLayout()
+        current_label = QLabel("Current (A):")
+        current_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        current_group.addWidget(current_label)
+
+        current_controls = QHBoxLayout()
+        self.current_input = QLineEdit()
+        self.current_input.setText(f"{self.current_value:.3f}")
+        self.current_input.setFont(segment_font)
+        self.current_input.setStyleSheet(
+            "border: 2px solid black; border-radius: 5px; padding: 8px; font-size: 20px; min-height: 40px;"
+        )
+        self.current_input.setFixedWidth(100)
+        current_controls.addWidget(self.current_input)
+
+        # Current increment/decrement
+        c_dec = QPushButton("-")
+        c_dec.setStyleSheet(
+            "font-size: 20px; font-weight: bold; min-height: 50px; min-width: 60px;"
+        )
+        c_dec.clicked.connect(lambda: self.adjust_current(-0.1))
+
+        c_inc = QPushButton("+")
+        c_inc.setStyleSheet(
+            "font-size: 20px; font-weight: bold; min-height: 50px; min-width: 60px;"
+        )
+        c_inc.clicked.connect(lambda: self.adjust_current(0.1))
+
+        current_controls.addWidget(c_dec)
+        current_controls.addWidget(c_inc)
+
+        # Current preset buttons
+        for current in [0.1, 0.5, 1.0]:
+            btn = QPushButton(f"{current}A")
+            btn.setStyleSheet("font-size: 16px; min-height: 50px; min-width: 80px;")
+            btn.clicked.connect(lambda _, c=current: self.set_current(c))
+            current_controls.addWidget(btn)
+
+        current_group.addLayout(current_controls)
+        layout.addLayout(current_group)
+
+        # Dialog buttons
+        button_layout = QHBoxLayout()
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setStyleSheet(
+            "font-size: 18px; min-height: 50px; min-width: 120px; background-color: #f44336; color: white;"
+        )
+        cancel_btn.clicked.connect(self.reject)
+        button_layout.addWidget(cancel_btn)
+
+        apply_btn = QPushButton("Apply")
+        apply_btn.setStyleSheet(
+            "font-size: 18px; min-height: 50px; min-width: 120px; background-color: #4CAF50; color: white;"
+        )
+        apply_btn.clicked.connect(self.accept)
+        button_layout.addWidget(apply_btn)
+
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
+
+    def set_voltage(self, voltage):
+        self.voltage_input.setText(f"{voltage:.3f}")
+
+    def set_current(self, current):
+        self.current_input.setText(f"{current:.3f}")
+
+    def adjust_voltage(self, delta):
+        try:
+            current_val = float(self.voltage_input.text())
+            new_val = max(0, current_val + delta)
+            self.voltage_input.setText(f"{new_val:.3f}")
+        except ValueError:
+            pass
+
+    def adjust_current(self, delta):
+        try:
+            current_val = float(self.current_input.text())
+            new_val = max(0, current_val + delta)
+            self.current_input.setText(f"{new_val:.3f}")
+        except ValueError:
+            pass
+
+    def get_values(self):
+        try:
+            voltage = float(self.voltage_input.text())
+            current = float(self.current_input.text())
+            return voltage, current
+        except ValueError:
+            return None, None
 
 
 class LogTerminal(QTextEdit):
@@ -134,7 +309,7 @@ class PowerSupplyGUI(QMainWindow):
                 self.serial_port_input.setCurrentIndex(index)
             # self.serial_port_input.setText(config.get("serial_port", ""))
             self.baud_rate_input.setCurrentText(config.get("baud_rate", "9600"))
-            self.instrument_id_input.setText(config.get("instrument_id", ""))
+            self.instrument_id_input.setText(config.get("instrument_id", "705"))
             for i, output in enumerate(self.outputs, start=1):
                 output_config = config.get(f"output_{i}", {})
                 output["voltage_out"].display(
@@ -192,7 +367,10 @@ class PowerSupplyGUI(QMainWindow):
         # Serial port input
         serial_port_label = QLabel("Serial Port:")
         self.serial_port_input = QComboBox()
+        self.serial_port_input.setStyleSheet("min-height: 35px;")
+        # Refresh button
         self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.setStyleSheet("font-size: 14px; min-height: 35px;")
         self.refresh_button.clicked.connect(populate_serial_ports)
         config_layout.addWidget(serial_port_label)
         config_layout.addWidget(self.serial_port_input)
@@ -216,6 +394,7 @@ class PowerSupplyGUI(QMainWindow):
         # Open/Close connection button
         self.connection_button = QPushButton("Open Connection")
         self.connection_button.setCheckable(True)
+        self.connection_button.setStyleSheet("font-size: 14px; min-height: 40px;")
         self.connection_button.toggled.connect(self.on_connection_toggled)
         config_layout.addWidget(self.connection_button)
 
@@ -227,7 +406,9 @@ class PowerSupplyGUI(QMainWindow):
         input_layout = QHBoxLayout()
         self.input_field = QLineEdit()
         self.input_field.setPlaceholderText("Enter command")
+        self.input_field.setStyleSheet("min-height: 35px;")
         self.send_button = QPushButton("Send")
+        self.send_button.setStyleSheet("font-size: 14px; min-height: 35px;")
         self.send_button.clicked.connect(self.on_send_clicked)
         self.input_field.returnPressed.connect(self.send_button.click)
         input_layout.addWidget(self.input_field)
@@ -237,7 +418,9 @@ class PowerSupplyGUI(QMainWindow):
         # Wrap the config layout in a QWidget
         config_container = QWidget()
         config_container.setLayout(config_layout)
-        config_container.setMaximumWidth(500)  # Set fixed width for config panel
+        config_container.setMaximumWidth(
+            350
+        )  # Reduced width for better space usage on small screen
 
         return config_container
 
@@ -256,27 +439,18 @@ class PowerSupplyGUI(QMainWindow):
 
         # Add fullscreen toggle button
         self.fullscreen_button = QPushButton("Toggle Fullscreen")
-        self.fullscreen_button.setFixedHeight(40)
+        self.fullscreen_button.setStyleSheet("font-size: 14px; min-height: 40px;")
         self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
         title_layout.addWidget(self.fullscreen_button, alignment=Qt.AlignRight)
 
         control_layout.addLayout(title_layout)
 
-        # Create a horizontal layout for the title and fullscreen button
-        title_layout = QHBoxLayout()
-        title_layout.addWidget(self.title_label)
-
-        # Add fullscreen toggle button
-        self.fullscreen_button = QPushButton("Toggle Fullscreen")
-        self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
-        title_layout.addWidget(self.fullscreen_button, alignment=Qt.AlignRight)
-
-        control_layout.addLayout(title_layout)
+        # Remove duplicate title layout code
 
         # Grid layout for outputs
         self.output_grid = QGridLayout()  # Create the grid layout
         self.output_grid.setHorizontalSpacing(20)  # Set horizontal spacing
-        #self.output_grid.setVerticalSpacing(20)  # Set vertical spacing
+        # self.output_grid.setVerticalSpacing(20)  # Set vertical spacing
         self.outputs = []  # List to store references to each output section
 
         output_sections = [
@@ -297,16 +471,12 @@ class PowerSupplyGUI(QMainWindow):
         grid_container.setLayout(self.output_grid)
         control_layout.addWidget(grid_container)
 
-        # Shared input panel for voltage and current
-        self.input_panel = self.create_input_panel()
-        control_layout.addLayout(self.input_panel)
-
         # Wrap the control layout in a QWidget
         control_container = QWidget()
         control_container.setLayout(control_layout)
 
         return control_container
-    
+
     def toggle_fullscreen(self):
         """Toggle between fullscreen and normal window."""
         if self.isFullScreen():
@@ -318,7 +488,8 @@ class PowerSupplyGUI(QMainWindow):
         """Override keyPressEvent to handle Enter key press."""
         if event.key() == Qt.Key_Return or event.key() == Qt.Key_Enter:
             if not self.input_field.hasFocus():
-                self.on_set_clicked()
+                # Enter key now does nothing since we use modal dialogs
+                pass
 
     def create_output_section(self, channel, title, color):
         """Create a section for one power supply output."""
@@ -327,7 +498,7 @@ class PowerSupplyGUI(QMainWindow):
         # Section title
         section_title = QLabel(title)
         section_title.setAlignment(Qt.AlignCenter)
-        #section_title.setFixedHeight(50)
+        # section_title.setFixedHeight(50)
         section_title.setStyleSheet(
             f"""
             font-size: 18px;
@@ -359,8 +530,18 @@ class PowerSupplyGUI(QMainWindow):
 
         plot_button = QPushButton(f"Open plot")
         plot_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        plot_button.setStyleSheet("font-size: 14px; min-height: 45px;")
         plot_button.clicked.connect(
             lambda checked, ch=channel: self.open_plot_window(ch)
+        )
+
+        settings_button = QPushButton("Settings")
+        settings_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        settings_button.setStyleSheet(
+            "font-size: 14px; min-height: 45px; background-color: #2196F3; color: white;"
+        )
+        settings_button.clicked.connect(
+            lambda checked, ch=channel: self.open_settings_dialog(ch)
         )
 
         # Layout for output values
@@ -368,13 +549,15 @@ class PowerSupplyGUI(QMainWindow):
         left_layout.addWidget(voltage_out)
         left_layout.addWidget(QLabel("Current Max Out (A):"))
         left_layout.addWidget(current_out)
+        right_layout.addWidget(settings_button)
         right_layout.addWidget(plot_button)
 
         # ON/OFF toggle button
         on_off_button = QPushButton("OFF")
         on_off_button.setCheckable(True)
-        #on_off_button.setFixedHeight(40)
-        on_off_button.setStyleSheet("font-size: 18px; font-weight: bold;")
+        on_off_button.setStyleSheet(
+            "font-size: 18px; font-weight: bold; min-height: 50px;"
+        )
         on_off_button.setEnabled(False)  # Set to disabled by default
         on_off_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         on_off_button.toggled.connect(
@@ -392,7 +575,6 @@ class PowerSupplyGUI(QMainWindow):
         container = QWidget()
         container.setObjectName("outerContainer")
         container.setLayout(layout)
-        container.mousePressEvent = lambda event: self.on_output_selected(container)
         # Add border around container
         container.setStyleSheet(
             "QWidget#outerContainer { border: 4px solid #545454; border-radius: 10px; }"
@@ -407,190 +589,6 @@ class PowerSupplyGUI(QMainWindow):
             "on_off_button": on_off_button,
             "title": title,
         }
-
-    def create_input_panel(self):
-        """Create a shared input panel for setting voltage and current."""
-        layout = QVBoxLayout()
-
-        # Load the seven-segment font
-        font_id = QFontDatabase.addApplicationFont("digital-7.ttf")
-        if font_id != -1:
-            font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
-            segment_font = QFont(font_family, 12)
-        else:
-            segment_font = QFont("Courier", 12)  # Fallback font
-
-        # Title
-        input_title = QLabel("Input Panel (Select an Output to Edit)")
-        input_title.setAlignment(Qt.AlignCenter)
-        input_title.setStyleSheet("font-size: 16px; font-weight: bold;")
-        layout.addWidget(input_title)
-
-        # Voltage set
-        h_layout1 = QHBoxLayout()
-        voltage_label = QLabel("Voltage Set (V):")
-        voltage_label.setStyleSheet("font-size: 16px;")  # Increase font size
-        h_layout1.addWidget(voltage_label)
-        self.voltage_input = QLineEdit()
-        self.voltage_input.setPlaceholderText("Enter voltage")
-        self.voltage_input.setFont(segment_font)
-        self.voltage_input.setText(f"{0:.3f}")
-        self.voltage_input.setStyleSheet(
-            "border: 1px solid black; border-radius: 1px; margin: 0px; font-size: 24px;"
-        )
-        h_layout1.addWidget(self.voltage_input)
-
-        # Fixed voltage buttons
-        fixed_voltages = [1.8, 3.3, 5.0]
-        for voltage in fixed_voltages:
-            button = QPushButton(f"{voltage}V")
-            button.setFixedSize(100, 30)  # Set button size
-            button.setStyleSheet("font-size: 16px;")  # Increase font size
-            button.clicked.connect(lambda _, v=voltage: self.set_fixed_voltage(v))
-            h_layout1.addWidget(button)
-
-        # Increment and Decrement buttons for voltage
-        voltage_inc_button = QPushButton("+")
-        voltage_inc_button.setFixedSize(50, 30)  # Set button size
-        voltage_inc_button.setStyleSheet("font-size: 16px;")  # Increase font size
-        voltage_inc_button.clicked.connect(
-            lambda: self.increment_value(self.voltage_input, 0.1)
-        )
-        h_layout1.addWidget(voltage_inc_button)
-
-        voltage_dec_button = QPushButton("-")
-        voltage_dec_button.setFixedSize(50, 30)  # Set button size
-        voltage_dec_button.setStyleSheet("font-size: 16px;")  # Increase font size
-        voltage_dec_button.clicked.connect(
-            lambda: self.increment_value(self.voltage_input, -0.1)
-        )
-        h_layout1.addWidget(voltage_dec_button)
-
-        layout.addLayout(h_layout1)
-
-        # Current set
-        h_layout2 = QHBoxLayout()
-        current_label = QLabel("Current Set (A):")
-        current_label.setStyleSheet("font-size: 16px;")  # Increase font size
-        h_layout2.addWidget(current_label)
-        self.current_input = QLineEdit()
-        self.current_input.setPlaceholderText("Enter current")
-        self.current_input.setFont(segment_font)
-        self.current_input.setText(f"{0:.3f}")
-        self.current_input.setStyleSheet(
-            "border: 1px solid black; border-radius: 1px; margin: 0px; font-size: 24px;"
-        )
-        h_layout2.addWidget(self.current_input)
-
-        # Fixed current buttons
-        fixed_currents = [0.1, 0.5, 1.0]
-        for current in fixed_currents:
-            button = QPushButton(f"{current}A")
-            button.setFixedSize(100, 30)  # Set button size
-            button.setStyleSheet("font-size: 16px;")  # Increase font size
-            button.clicked.connect(lambda _, c=current: self.set_fixed_current(c))
-            h_layout2.addWidget(button)
-
-        # Increment and Decrement buttons for current
-        current_inc_button = QPushButton("+")
-        current_inc_button.setFixedSize(50, 30)  # Set button size
-        current_inc_button.setStyleSheet("font-size: 16px;")  # Increase font size
-        current_inc_button.clicked.connect(
-            lambda: self.increment_value(self.current_input, 0.1)
-        )
-        h_layout2.addWidget(current_inc_button)
-
-        current_dec_button = QPushButton("-")
-        current_dec_button.setFixedSize(50, 30)
-        current_dec_button.setStyleSheet("font-size: 16px;")
-        current_dec_button.clicked.connect(
-            lambda: self.increment_value(self.current_input, -0.1)
-        )
-        h_layout2.addWidget(current_dec_button)
-
-        layout.addLayout(h_layout2)
-
-        # Set button
-        self.set_button = QPushButton("Set")
-        self.set_button.setStyleSheet("font-size: 26px; padding: 5px;")
-        self.set_button.setFixedSize(200, 50)
-        self.set_button.clicked.connect(self.on_set_clicked)
-        self.set_button.setEnabled(False)
-
-        # Center the set button
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        button_layout.addWidget(self.set_button)
-        button_layout.addStretch()
-
-        layout.addLayout(button_layout)
-
-        return layout
-
-    def set_fixed_voltage(self, voltage):
-        """Set the voltage input to a fixed value."""
-        self.voltage_input.setText(f"{voltage:.3f}")
-
-    def set_fixed_current(self, current):
-        """Set the current input to a fixed value."""
-        self.current_input.setText(f"{current:.3f}")
-
-    def increment_value(self, line_edit, step):
-        """Increment the value in the QLineEdit by the given step."""
-        try:
-            value = float(line_edit.text())
-        except ValueError:
-            value = 0.0
-        value += step
-        line_edit.setText(f"{value:.3f}")
-
-    def on_output_selected(self, output_container):
-        """Handle selection of an output section."""
-        # Reset the border of previously selected output (if any)
-        if hasattr(self, "selected_output") and self.selected_output:
-            self.selected_output["container"].setStyleSheet(
-                "QWidget#outerContainer { border: 4px solid #545454; border-radius: 10px; }"
-            )  # Remove previous highlight
-
-        # Find and set the newly selected output
-        for output in self.outputs:
-            if output["container"] == output_container:
-                self.selected_output = output
-                # Apply border highlighting only to the outer container
-                output["container"].setStyleSheet(
-                    "QWidget#outerContainer { border: 5px solid #8ab6f7; border-radius: 10px; }"
-                )
-                break
-
-        # Populate input fields with current values
-        voltage_out = self.selected_output["voltage_out"].value()
-        current_out = self.selected_output["current_out"].value()
-        self.voltage_input.setText(f"{voltage_out:.3f}")
-        self.current_input.setText(f"{current_out:.3f}")
-
-    def on_set_clicked(self):
-        """Apply the voltage and current to the selected output."""
-        if not hasattr(self, "selected_output") or not self.selected_output:
-            print("No output selected!")
-            self.terminal.log_error("No output selected!")
-            return
-
-        voltage = self.voltage_input.text()
-        current = self.current_input.text()
-
-        # Update selected output's displayed values
-        try:
-            voltage_value = float(voltage)
-            current_value = float(current)
-            self.selected_output["voltage_out"].display(f"{voltage_value:.3f}")
-            self.selected_output["current_out"].display(f"{current_value:.3f}")
-
-            # Call the power supply methods
-            output_index = self.outputs.index(self.selected_output) + 1
-            self.power_supply.set_voltage(output_index, voltage_value)
-            self.power_supply.set_current_limit(output_index, current_value)
-        except ValueError:
-            print("Invalid input for voltage or current!")
 
     def on_on_off_toggled(self, checked, voltage_out, current_out):
         """Handle ON/OFF toggle for an output."""
@@ -660,7 +658,7 @@ class PowerSupplyGUI(QMainWindow):
             )
             try:
                 self.power_supply.connect(serial_port, int(baud_rate), instrument_id)
-                self.set_button.setEnabled(True)  # Enable the set button when connected
+
                 self.connection_button.setText("Close Connection")
                 self.terminal.log_debug(
                     f"Connected to {serial_port} at {baud_rate} baud with instrument ID {instrument_id}"
@@ -707,6 +705,28 @@ class PowerSupplyGUI(QMainWindow):
 
     def open_plot_window(self, channel):
         self.plot_windows[channel].show()
+
+    def open_settings_dialog(self, channel):
+        """Open the settings dialog for a specific channel."""
+        # Get current values
+        current_voltage = self.outputs[channel - 1]["voltage_out"].value()
+        current_current = self.outputs[channel - 1]["current_out"].value()
+
+        # Create and show dialog
+        dialog = InputDialog(self, channel, current_voltage, current_current)
+        if dialog.exec_() == QDialog.Accepted:
+            voltage, current = dialog.get_values()
+            if voltage is not None and current is not None:
+                # Update the output values
+                self.outputs[channel - 1]["voltage_out"].display(f"{voltage:.3f}")
+                self.outputs[channel - 1]["current_out"].display(f"{current:.3f}")
+
+                # Send to power supply if connected
+                try:
+                    self.power_supply.set_voltage(channel, voltage)
+                    self.power_supply.set_current_limit(channel, current)
+                except Exception as e:
+                    self.terminal.log_error(f"Failed to set values: {str(e)}")
 
 
 def load_config():

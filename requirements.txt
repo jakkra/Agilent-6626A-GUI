@@ -1,2 +1,6 @@
 PyQt5==5.15.11
 PyQt5_sip==12.15.0
+QDarkStyle==3.2.3
+pyvisa==1.15.0
+pyvisa-py==0.8.0
+pyqtgraph==0.13.7
